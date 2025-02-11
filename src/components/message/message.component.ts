@@ -7,7 +7,9 @@ import { Component, Input } from '@angular/core';
     <p>{{message}}</p>
   
   `,
-  styles: ``
+  styles: `
+  
+  `
 })
 export class MessageComponent {
   @Input() message?: string;
