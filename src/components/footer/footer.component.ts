@@ -51,17 +51,19 @@ import { FileuploadComponent } from '../fileupload/fileupload.component';
   `
 })
 export class FooterComponent {
+  isOpened:boolean = false;
+  
   constructor(private bottomSheet: MatBottomSheet){
 
   }
 
   openPanel(){
-    this.bottomSheet.open(FileuploadComponent, {
-      hasBackdrop: false,
-      disableClose: false,
-    })
-
-
+      this.bottomSheet.open(FileuploadComponent, {
+        hasBackdrop: true,
+        disableClose: false,
+      }
+    )
   }
+
 
 }

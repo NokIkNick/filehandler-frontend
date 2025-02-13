@@ -4,12 +4,14 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatIconButton } from '@angular/material/button';
 import {NgxFileDropEntry, NgxFileDropModule} from 'ngx-file-drop';
 import { lastValueFrom } from 'rxjs';
-import { HttpHeaders } from '@angular/common/http';
+import { HttpEventType, HttpHeaders } from '@angular/common/http';
 import { FileService } from '../../services/file.service';
+import {MatProgressBarModule} from '@angular/material/progress-bar';
+import { FileProgress } from '../../interfaces/file-progress';
 
 @Component({
   selector: 'app-fileupload',
-  imports: [MatIconModule, MatIconButton, NgxFileDropModule],
+  imports: [MatIconModule, MatIconButton, NgxFileDropModule, MatProgressBarModule],
   template: `
     <div class="panel-content">
       <div class="panel-header">
@@ -24,15 +26,18 @@ import { FileService } from '../../services/file.service';
           </ng-template>
         </ngx-file-drop>
 
+        
+
         <div class="upload-table">
           <table class="table">
             <tbody class="upload-name-style">
-              @for (file of files; track file) {
-                <tr>
+              @for (file of fileProgresses; track file) {
+                  <tr>
                   <td>
                     <strong>
-                      {{file.relativePath}}
-                    </strong> 
+                      {{file.status}}
+                    </strong>
+                    <mat-progress-bar mode="determinate" [value]="file.progress"></mat-progress-bar> 
                   </td>
                 </tr>
               }
@@ -85,162 +90,66 @@ import { FileService } from '../../services/file.service';
 })
 export class FileuploadComponent {
   files: NgxFileDropEntry[] = [];
-  
+  fileProgresses: FileProgress[] = [];
+  uploadProgess: number = 0;
+  uploadStatus?: string;
+
   constructor(private bottomSheetRef: MatBottomSheetRef<FileuploadComponent>, private fileService: FileService){
 
   }
 
-  public dropped(files: NgxFileDropEntry[]){
-    this.files = files;
+  public dropped(files: NgxFileDropEntry[]) {
+    this.fileProgresses = files.map(file => ({
+      file,
+      progress: 0,
+      status: 'Starting upload...'
+    }));
 
-    for(const droppedFile of files){
+    files.forEach((droppedFile, i) => {
 
-      
-      if(droppedFile.fileEntry.isFile){
+      if (droppedFile.fileEntry.isFile) {
+
         const fileEntry = droppedFile.fileEntry as FileSystemFileEntry;
-        fileEntry.file((file:File) => {
+        
+        fileEntry.file((file: File) => {
 
-          
           const formData = new FormData();
-          formData.append('file', file)
-          formData.append('fileName', file.name)
-          
+          formData.append('file', file);
+          formData.append('fileName', file.name);
+          formData.append('fileSize', file.size.toString());
 
-          const fileExtension = file.name.substring(file.name.lastIndexOf("."));
-          const contentType = this.findContentType(fileExtension);
+          this.fileService.uploadFile(formData, "303090-3241").subscribe({
+            next: (event) =>{
+            if (event.type === HttpEventType.UploadProgress) {
 
-          
-          const headers = new HttpHeaders({
-            'Content-Type': contentType
-          });
+              const percentDone = Math.round(100 * event.loaded / event.total!);
+              this.fileProgresses[i].progress = percentDone;
 
-          formData.append('Content-Type', contentType);
-          
-          this.fileService.uploadFile(formData, "303090-3241").subscribe((x) => {
-            console.log(x);
-          })
+              console.log(this.fileProgresses[i].progress);
+              
 
+              this.fileProgresses[i].status = percentDone === 100 
+                ? `Successfully uploaded ${file.name}`
+                : 'Uploading file...';
+            }
+          },
+          error: (error) => {
+            this.fileProgresses[i].status = `Failed to upload ${file.name}: ${error.message}`
+          }
         });
-      }else {
-        //if it wasnt a file, it could've been an empty directory
-        const fileEntry = droppedFile.fileEntry as FileSystemDirectoryEntry;
-        console.log(droppedFile.relativePath, fileEntry);
       }
-    }
+    )}
   }
+)
+}
 
   public fileOver(event: Event){
-    console.log(event);
+    
   }
 
   public fileLeave(event: Event){
-    console.log(event);
+    
   }
-
-
-  findContentType(extension: string){
-    let contentType: string;
-    switch(extension){
-      case ".txt":
-        contentType = "text/plain";
-        break;
-      case ".pdf":
-        contentType = "application/pdf";
-        break;
-      case ".json":
-        contentType = "application/json";
-        break;
-      case ".html":
-        contentType = "text/html";
-        break;
-      case ".css":
-        contentType = "text/css";
-        break;
-      case ".js":
-        contentType = "application/javascript";
-        break;
-      case ".xml":
-        contentType = "application/xml";
-        break;
-      case ".csv":
-        contentType = "text/csv";
-        break;
-      case ".jpg":
-      case ".jpeg":
-        contentType = "image/jpeg";
-        break;
-      case ".png":
-        contentType = "image/png";
-        break;
-      case ".gif":
-        contentType = "image/gif";
-        break;
-      case ".svg":
-        contentType = "image/svg+xml";
-        break;
-      case ".webp":
-        contentType = "image/webp";
-        break;
-      case ".mp3":
-        contentType = "audio/mpeg";
-        break;
-      case ".wav":
-        contentType = "audio/wav";
-        break;
-      case ".mp4":
-        contentType = "video/mp4";
-        break;
-      case ".avi":
-        contentType = "video/x-msvideo";
-        break;
-      case ".mov":
-        contentType = "video/quicktime";
-        break;
-      case ".zip":
-        contentType = "application/zip";
-        break;
-      case ".rar":
-        contentType = "application/vnd.rar";
-        break;
-      case ".tar":
-        contentType = "application/x-tar";
-        break;
-      case ".gz":
-        contentType = "application/gzip";
-        break;
-      case ".doc":
-        contentType = "application/msword";
-        break;
-      case ".docx":
-        contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        break;
-      case ".xls":
-        contentType = "application/vnd.ms-excel";
-        break;
-      case ".xlsx":
-        contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        break;
-      case ".ppt":
-        contentType = "application/vnd.ms-powerpoint";
-        break;
-      case ".pptx":
-        contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-        break;
-      case ".odt":
-        contentType = "application/vnd.oasis.opendocument.text";
-        break;
-      case ".ods":
-        contentType = "application/vnd.oasis.opendocument.spreadsheet";
-        break;
-      case ".odp":
-        contentType = "application/vnd.oasis.opendocument.presentation";
-        break;
-      default:
-        contentType = "application/octet-stream";
-        break;
-    }
-    return contentType;
-}
 
 
   closePanel(){
