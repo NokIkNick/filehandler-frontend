@@ -1,13 +1,14 @@
 import { HttpClient, HttpEventType, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FileService {
-
+  fileNames$: Subject<string[]> = new Subject;
   APIURL:string = "http://localhost:8080/files"
+  
 
   constructor(private http: HttpClient) { 
 
@@ -16,6 +17,24 @@ export class FileService {
   uploadFile(file: FormData, cpr:string) {
     return this.http.post(this.APIURL+"/"+cpr+"/uploadLargeFile", file, {responseType: 'text', reportProgress: true, observe: 'events'});
   }
+
+
+  getFileNames(cpr:string): Observable<string[]>{
+    return this.http.get<string[]>(this.APIURL+"/userFiles/"+cpr)
+  }
+
+  getFileLink(cpr:string, fileName:string) : Observable<string> {
+    return this.http.get(this.APIURL+"/"+cpr+"/"+fileName, {responseType: 'text'})
+  }
+
+  set setAllFileNames(names: string[]){
+    this.fileNames$.next(names);
+  }
+
+  get getAllFileNames(): Observable<string[]> {
+    return this.fileNames$.asObservable();
+  }
+
 
   findContentType(extension: string){
     let contentType: string;
