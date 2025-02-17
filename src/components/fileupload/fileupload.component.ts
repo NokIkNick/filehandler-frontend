@@ -3,14 +3,17 @@ import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatIconModule } from '@angular/material/icon';
 import { MatIconButton } from '@angular/material/button';
 import {NgxFileDropEntry, NgxFileDropModule} from 'ngx-file-drop';
-import { lastValueFrom, Subscription } from 'rxjs';
-import { HttpEventType, HttpHeaders } from '@angular/common/http';
+import { Subscription } from 'rxjs';
+import { HttpEventType } from '@angular/common/http';
 import { FileService } from '../../services/file.service';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import { FileProgress } from '../../interfaces/file-progress';
 import { FilesocketService } from '../../sockets/filesocket.service';
 import { UserService } from '../../services/user.service';
 import { User } from '../../interfaces/user';
+import { UploadProgress } from '../../interfaces/upload-progress';
+import { DialogService } from '../../services/dialog.service';
+import { ImageviewerComponent } from '../imageviewer/imageviewer.component';
 
 @Component({
   selector: 'app-fileupload',
@@ -23,26 +26,48 @@ import { User } from '../../interfaces/user';
         </button>
       </div>
       <div class="panel-body">
-        <ngx-file-drop dropZoneLabel="Drop files here" (onFileDrop)="dropped($event)" (onFileOver)="fileOver($event)" (onFileLeave)="fileLeave($event)">
+        <ngx-file-drop dropZoneLabel="Drop files here" (onFileDrop)="dropped($event)">
           <ng-template ngx-file-drop-content-tmp let-openFileSelector="openFileSelector">
             <button type="button" (click)="openFileSelector()">Browse Files</button>
           </ng-template>
         </ngx-file-drop>
-
+        
         
 
         <div class="upload-table">
           <table class="table">
             <tbody class="upload-name-style">
               @for (file of fileProgresses; track file) {
-                  <tr>
+                <strong>{{file.status}}</strong>
+                @if(file.status === "Uploading file..." || file.status === "Starting upload..."){
+                <tr>
                   <td>
-                    <strong>
-                      {{file.status}}
-                    </strong>
                     <mat-progress-bar mode="determinate" [value]="file.progress"></mat-progress-bar> 
                   </td>
                 </tr>
+                }@else if (progressMap.get(file.fileName)?.status === 0) {
+                  <tr>
+                    <td>
+                      <strong>
+                        {{"Uploading "+progressMap.get(file.fileName)?.fileName+" to server.."}}
+                      </strong>
+                      <mat-progress-bar mode="determinate" [value]="progressMap.get(file.fileName)?.percentage"></mat-progress-bar> 
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>
+                        {{progressMap.get(file.fileName)?.uploadedParts}}/{{progressMap.get(file.fileName)?.totalParts}}
+                      </strong>
+                    </td>
+                  </tr>
+                }@else {
+                  <tr>
+                    <td>
+                      <strong>File upload for {{file.fileName}} completed!</strong>
+                    </td>
+                  </tr>
+                }  
               }
             </tbody>
           </table>
@@ -88,6 +113,10 @@ import { User } from '../../interfaces/user';
     .panel-body {
       padding: 0 16px;
     }
+
+    .table{
+      min-width: 100%;
+    }
   
   `
 })
@@ -100,8 +129,9 @@ export class FileuploadComponent implements OnInit, OnDestroy {
   loggedInUser?: User;
   backEndMessages$?: Subscription;
   backEndMessage: string = "";
+  progressMap: Map<string, UploadProgress> = new Map<string, UploadProgress>();
 
-  constructor(private bottomSheetRef: MatBottomSheetRef<FileuploadComponent>, private fileService: FileService, private fileSocket:FilesocketService, private userService: UserService){
+  constructor(readonly bottomSheetRef: MatBottomSheetRef<FileuploadComponent>, readonly fileService: FileService, readonly fileSocket:FilesocketService, readonly userService: UserService, readonly dialogService: DialogService){
     
   }
   
@@ -113,6 +143,9 @@ export class FileuploadComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.unSubToUser();
     this.unSubToBackendMessages();
+    this.fileService.getFileNames(this.loggedInUser?.cpr!).subscribe((names) => {
+      this.fileService.setAllFileNames = names;
+    });
   }
 
   subToUser(){
@@ -136,6 +169,10 @@ export class FileuploadComponent implements OnInit, OnDestroy {
       this.backEndMessage = x.percentage.toString();
       console.log(this.backEndMessage);
       
+      this.progressMap.set(x.fileName, x);
+
+      console.table(this.progressMap);
+
     })
   }
 
@@ -144,8 +181,11 @@ export class FileuploadComponent implements OnInit, OnDestroy {
   }
 
   public dropped(files: NgxFileDropEntry[]) {
+    this.progressMap = new Map<string, UploadProgress>();
+
     this.fileProgresses = files.map(file => ({
-      file,
+      file: file,
+      fileName: file.fileEntry.name,
       progress: 0,
       status: 'Starting upload...'
     }));
@@ -157,6 +197,17 @@ export class FileuploadComponent implements OnInit, OnDestroy {
         const fileEntry = droppedFile.fileEntry as FileSystemFileEntry;
         
         fileEntry.file((file: File) => {
+          
+          const fileSizesInMb = (file.size / 1024 / 1024);
+          
+          if(fileSizesInMb > 99 ){
+            const dialogConfig = {
+              data: {
+                partAmount: fileSizesInMb 
+              }
+            };
+            this.dialogService.displayDialogWithComponent(ImageviewerComponent, dialogConfig)
+          }
 
           const formData = new FormData();
           formData.append('file', file);
@@ -174,7 +225,7 @@ export class FileuploadComponent implements OnInit, OnDestroy {
               
 
               this.fileProgresses[i].status = percentDone === 100 
-                ? `Successfully uploaded ${file.name}`
+                ? `Successfully uploaded: ${file.name}, to backend`
                 : 'Uploading file...';
             }
           },
@@ -186,15 +237,8 @@ export class FileuploadComponent implements OnInit, OnDestroy {
     )}
   }
 )
+
 }
-
-  public fileOver(event: Event){
-    
-  }
-
-  public fileLeave(event: Event){
-    
-  }
 
 
   closePanel(){
